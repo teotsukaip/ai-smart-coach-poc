@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIスマートコーチ検証</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+
+        .main-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* --- 動画レイアウト --- */
+        .video-layout {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .video-wrapper {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            width: 50%;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            color: #4a5568;
+            width: 100%;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 8px;
+        }
+
+        input[type="file"] {
+            margin-bottom: 15px;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            max-height: 50vh;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+
+        .flipped {
+            transform: scaleX(-1);
+        }
+
+        /* --- 反転＆マーカー開始オーバーレイ --- */
+        .overlay-btns {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            gap: 15px;
+        }
+
+        .circle-action-btn {
+            font-size: 1.2rem;
+            color: #333;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background-color: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+            /* アイコン改行防止 */
+            letter-spacing: -1px;
+            /* 三角アイコンの隙間調整 */
+        }
+
+        .circle-action-btn:hover {
+            background-color: #ffffff;
+        }
+
+        /* --- マーカー描画キャンバス --- */
+        .drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .drawing-canvas.active {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        /* --- マーカー描画用ツールパネル（動画下） --- */
+        .drawing-panel {
+            display: none;
+            width: 100%;
+            margin-top: 15px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        .drawing-panel.active {
+            display: flex;
+        }
+
+        .d-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #ffffff;
+            padding: 6px 12px;
+            border-radius: 30px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+        }
+
+        .d-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .d-btn:hover {
+            background: #edf2f7;
+        }
+
+        .d-btn.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .d-btn-text {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: none;
+            border: none;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #4a5568;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 20px;
+            transition: color 0.2s;
+        }
+
+        .d-btn-text:hover {
+            color: #2b6cb0;
+        }
+
+        .tool-icon-small {
+            font-size: 1.2rem;
+        }
+
+        .color-preview {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid #cbd5e0;
+            display: inline-block;
+        }
+
+        /* =========================================
+            「重ねるモード」専用スタイル・動画下パネル
+            ========================================= */
+        .video-layout.is-overlay {
+            position: relative;
+            display: block;
+        }
+
+        .video-layout.is-overlay .video-wrapper {
+            width: 100%;
+        }
+
+        .video-layout.is-overlay #wrapper-1 {
+            position: relative;
+            z-index: 1;
+        }
+
+        .video-layout.is-overlay #wrapper-2 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: transparent;
+            box-shadow: none;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .video-layout.is-overlay #wrapper-2 h2,
+        .video-layout.is-overlay #wrapper-2 input[type="file"] {
+            visibility: hidden;
+        }
+
+        .video-layout.is-overlay #wrapper-2 .video-container {
+            background-color: transparent;
+        }
+
+        .video-layout.is-overlay #wrapper-2 .overlay-btns {
+            pointer-events: auto;
+        }
+
+        .video-layout.is-overlay #wrapper-2 .drawing-canvas {
+            pointer-events: none;
+        }
+
+        .video-layout.is-overlay #wrapper-2 .drawing-canvas.active {
+            pointer-events: auto;
+        }
+
+        .video-layout.is-overlay #wrapper-2 .drawing-panel {
+            pointer-events: auto;
+        }
+
+        .video-layout.is-overlay.swapped #wrapper-1 {
+            z-index: 3;
+        }
+
+        .overlay-controls-panel {
+            display: none;
+            width: 100%;
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .swap-btn-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            border-bottom: 1px dashed #cbd5e0;
+            padding-bottom: 15px;
+        }
+
+        .modern-swap-btn {
+            background-color: #f7fafc;
+            color: #4a5568;
+            border: 2px solid #e2e8f0;
+            padding: 10px 30px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modern-swap-btn:hover {
+            border-color: #2b6cb0;
+            color: #2b6cb0;
+        }
+
+        .modern-swap-btn.active {
+            background-color: #2b6cb0;
+            color: #ffffff;
+            border-color: #2b6cb0;
+        }
+
+        .overlay-cols-wrapper {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+        }
+
+        .overlay-controls-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .overlay-controls-col h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+            text-align: center;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .control-item label {
+            font-size: 0.9rem;
+            color: #4a5568;
+            font-weight: bold;
+            width: 70px;
+            flex-shrink: 0;
+        }
+
+        .control-item span {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #4a5568;
+            width: 45px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .modern-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            outline: none;
+            flex: 1;
+        }
+
+        .modern-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            border: 2px solid #ffffff;
+        }
+
+        .seek-slider::-webkit-slider-thumb {
+            background: #2b6cb0;
+        }
+
+        .opacity-slider::-webkit-slider-thumb {
+            background: #6b46c1;
+        }
+
+        /* =========================================
+            メインコントロールエリア
+            ========================================= */
+        .controls-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .seek-container {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        #play-btn {
+            background-color: #2b6cb0;
+            color: white;
+            border: none;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(43, 108, 176, 0.3);
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        #play-btn:hover {
+            background-color: #2c5282;
+            transform: scale(1.05);
+        }
+
+        #seek-bar {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .time-display {
+            font-family: monospace;
+            font-size: 1rem;
+            color: #4a5568;
+            min-width: 90px;
+            text-align: right;
+        }
+
+        /* --- メインアクションメニュー --- */
+        .main-action-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            align-items: center;
+        }
+
+        .menu-btn {
+            width: 100%;
+            max-width: 320px;
+            padding: 15px 20px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .primary-menu-btn {
+            background-color: #2b6cb0;
+            color: white;
+            border: none;
+            box-shadow: 0 4px 6px rgba(43, 108, 176, 0.3);
+        }
+
+        .primary-menu-btn:hover {
+            background-color: #2c5282;
+            transform: translateY(-2px);
+        }
+
+        .secondary-menu-btn {
+            background-color: #ffffff;
+            color: #2b6cb0;
+            border: 2px solid #2b6cb0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .secondary-menu-btn:hover {
+            background-color: #ebf8ff;
+            transform: translateY(-2px);
+        }
+
+        .toolbar {
+            display: none;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            width: 100%;
+            padding-top: 15px;
+            border-top: 1px solid #edf2f7;
+        }
+
+        .tool-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            width: 70px;
+            color: #4a5568;
+            transition: transform 0.2s;
+        }
+
+        .tool-btn:hover {
+            transform: translateY(-3px);
+            color: #2b6cb0;
+        }
+
+        .tool-btn.active {
+            color: #2b6cb0;
+        }
+
+        .tool-icon {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .tool-text {
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .speed-controls {
+            display: none;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            width: 100%;
+            padding-top: 10px;
+        }
+
+        .speed-btn {
+            padding: 8px 16px;
+            border: 1px solid #cbd5e0;
+            background-color: #ffffff;
+            color: #4a5568;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .speed-btn:hover {
+            background-color: #edf2f7;
+        }
+
+        .speed-btn.active {
+            background-color: #2b6cb0;
+            color: white;
+            border-color: #2b6cb0;
+        }
+
+        #global-reset-btn {
+            display: none;
+            margin-top: 10px;
+            background-color: #e2e8f0;
+            color: #4a5568;
+            border: none;
+            padding: 8px 25px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #global-reset-btn:hover {
+            background-color: #cbd5e0;
+        }
+
+        /* =========================================
+            各種モーダル (共通)
+            ========================================= */
+        .modal-overlay-bg {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 12px;
+            max-width: 90%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            position: relative;
+        }
+
+        .modal-title {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .btn-modal {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .btn-cancel {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-danger {
+            background: #e53e3e;
+            color: #fff;
+        }
+
+        .btn-primary {
+            background: #2b6cb0;
+            color: #fff;
+        }
+
+        .modal-close-icon {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #a0aec0;
+            background: none;
+            border: none;
+        }
+
+        /* カラー選択モーダル用 */
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .color-item {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            margin: 0 auto;
+        }
+
+        .color-item.selected {
+            border: 3px solid #2d3748;
+            transform: scale(1.1);
+        }
+
+        /* ツール選択モーダル用 */
+        .tool-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            text-align: left;
+        }
+
+        .tool-list-item {
+            padding: 10px 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            border: 2px solid transparent;
+        }
+
+        .tool-list-item.selected {
+            border-color: #2b6cb0;
+            background: #ebf8ff;
+            color: #2b6cb0;
+        }
+
+        @media (max-width: 768px) {
+            .video-layout {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .video-wrapper {
+                width: 100%;
+                padding: 12px;
+            }
+
+            video {
+                max-height: 35vh;
+            }
+
+            .overlay-cols-wrapper {
+                flex-direction: column;
+            }
+
+            .color-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .menu-btn {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="main-container">
+        <div class="video-layout">
+            <div class="video-wrapper" id="wrapper-1">
+                <h2>動画 1（お手本）</h2>
+                <input type="file" id="upload-1" accept="video/*">
+
+                <div class="video-container" id="container-1">
+                    <video id="video-1" playsinline muted></video>
+                    <canvas id="canvas-1" class="drawing-canvas"></canvas>
+                    <div class="overlay-btns" id="overlay-1">
+                        <button class="circle-action-btn flip-execute-btn" onclick="toggleFlip('video-1')"
+                            title="反転">▶|◀</button>
+                        <button class="circle-action-btn marker-execute-btn" onclick="startDrawing(1)"
+                            title="マーカー">✏️</button>
+                    </div>
+                </div>
+
+                <div class="drawing-panel" id="d-panel-1">
+                    <div class="d-group">
+                        <button class="d-btn" onclick="undoDraw(1)" id="undo-1" title="やり直し">↩️</button>
+                        <button class="d-btn" onclick="redoDraw(1)" id="redo-1" title="進む">↪️</button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="openColorModal(1)">
+                            <span class="color-preview" id="color-prev-1" style="background-color: #FFD700;"></span>
+                            <span>カラー</span>
+                        </button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="openToolModal(1)">
+                            <span class="tool-icon-small">📐</span>
+                            <span>マーカー編集</span>
+                        </button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="openClearModal(1)">
+                            <span class="tool-icon-small">🗑️</span>
+                            <span>全削除</span>
+                        </button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="endDrawing(1)">
+                            <span class="tool-icon-small" style="color: #48bb78; font-weight: 900;">✔</span>
+                            <span>完了</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="video-wrapper" id="wrapper-2">
+                <h2>動画 2（自分のフォーム）</h2>
+                <input type="file" id="upload-2" accept="video/*">
+
+                <div class="video-container" id="container-2">
+                    <video id="video-2" playsinline muted></video>
+                    <canvas id="canvas-2" class="drawing-canvas"></canvas>
+                    <div class="overlay-btns" id="overlay-2">
+                        <button class="circle-action-btn flip-execute-btn" onclick="toggleFlip('video-2')"
+                            title="反転">▶|◀</button>
+                        <button class="circle-action-btn marker-execute-btn" onclick="startDrawing(2)"
+                            title="マーカー">✏️</button>
+                    </div>
+                </div>
+
+                <div class="drawing-panel" id="d-panel-2">
+                    <div class="d-group">
+                        <button class="d-btn" onclick="undoDraw(2)" id="undo-2" title="やり直し">↩️</button>
+                        <button class="d-btn" onclick="redoDraw(2)" id="redo-2" title="進む">↪️</button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="openColorModal(2)">
+                            <span class="color-preview" id="color-prev-2" style="background-color: #FFD700;"></span>
+                            <span>カラー</span>
+                        </button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="openToolModal(2)">
+                            <span class="tool-icon-small">📐</span>
+                            <span>マーカー編集</span>
+                        </button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="openClearModal(2)">
+                            <span>全削除</span>
+                        </button>
+                    </div>
+                    <div class="d-group">
+                        <button class="d-btn-text" onclick="endDrawing(2)">
+                            <span class="tool-icon-small" style="color: #48bb78; font-weight: 900;">✔</span>
+                            <span>完了</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="overlay-controls-panel" id="overlay-controls-panel">
+            <div class="swap-btn-container">
+                <button id="tool-swap" class="modern-swap-btn">↕️ 前面を入れ替える</button>
+            </div>
+            <div class="overlay-cols-wrapper">
+                <div class="overlay-controls-col">
+                    <h3>動画 1（お手本）調整</h3>
+                    <div class="control-item">
+                        <label>再生位置</label>
+                        <input type="range" id="ind-seek-1" class="modern-slider seek-slider" value="0" min="0"
+                            step="0.01" disabled>
+                        <span id="ind-time-1">00:00</span>
+                    </div>
+                    <div class="control-item">
+                        <label>透明度</label>
+                        <input type="range" id="opacity-slider-1" class="modern-slider opacity-slider" min="0" max="100"
+                            step="1" value="100">
+                        <span id="opacity-val-1">100%</span>
+                    </div>
+                </div>
+                <div class="overlay-controls-col">
+                    <h3>動画 2（自分のフォーム）調整</h3>
+                    <div class="control-item">
+                        <label>再生位置</label>
+                        <input type="range" id="ind-seek-2" class="modern-slider seek-slider" value="0" min="0"
+                            step="0.01" disabled>
+                        <span id="ind-time-2">00:00</span>
+                    </div>
+                    <div class="control-item">
+                        <label>透明度</label>
+                        <input type="range" id="opacity-slider-2" class="modern-slider opacity-slider" min="0" max="100"
+                            step="1" value="50">
+                        <span id="opacity-val-2">50%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-layout">
+            <div class="seek-container">
+                <button id="play-btn" title="再生/一時停止">▶</button>
+                <input type="range" id="seek-bar" value="0" min="0" step="0.01" disabled>
+                <div class="time-display">
+                    <span id="current-time">00:00</span> / <span id="duration-time">00:00</span>
+                </div>
+            </div>
+
+            <div class="main-action-menu" id="main-action-menu">
+                <button id="compare-btn" class="menu-btn primary-menu-btn">比べる</button>
+                <button id="mylist-btn" class="menu-btn secondary-menu-btn">マイリスト</button>
+            </div>
+
+            <div class="toolbar" id="toolbar">
+                <button class="tool-btn" id="tool-marker"><span class="tool-icon">🖍️</span><span
+                        class="tool-text">マーカー</span></button>
+                <button class="tool-btn" id="tool-overlay"><span class="tool-icon">🔲</span><span
+                        class="tool-text">重ねる</span></button>
+                <button class="tool-btn" id="tool-speed"><span class="tool-icon">⏱️</span><span
+                        class="tool-text">速さ</span></button>
+                <button class="tool-btn" id="tool-flip"><span class="tool-icon">🔄</span><span
+                        class="tool-text">反転</span></button>
+                <button class="tool-btn" id="tool-save"><span class="tool-icon">📥</span><span
+                        class="tool-text">動画保存</span></button>
+            </div>
+
+            <div class="speed-controls" id="speed-controls">
+                <button class="speed-btn" data-speed="0.1">0.1x</button>
+                <button class="speed-btn" data-speed="0.25">0.25x</button>
+                <button class="speed-btn" data-speed="0.5">0.5x</button>
+                <button class="speed-btn active" data-speed="1.0">標準</button>
+            </div>
+
+            <button id="global-reset-btn">✖ 最初に戻る</button>
+
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-clear">
+        <div class="modal-content">
+            <h3 class="modal-title">編集内容をクリア</h3>
+            <p style="color: #4a5568;">編集内容をクリアしてもよろしいですか？</p>
+            <div class="modal-actions">
+                <button class="btn-modal btn-cancel" onclick="closeModal('modal-clear')">キャンセル</button>
+                <button class="btn-modal btn-danger" onclick="executeClear()">クリア</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-color">
+        <div class="modal-content">
+            <button class="modal-close-icon" onclick="closeModal('modal-color')">×</button>
+            <h3 class="modal-title">マーカーの色を選択してください</h3>
+            <div class="color-grid" id="color-grid-container"></div>
+            <div class="modal-actions">
+                <button class="btn-modal btn-primary" onclick="executeColor()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-tool">
+        <div class="modal-content" style="width: 300px;">
+            <button class="modal-close-icon" onclick="closeModal('modal-tool')">×</button>
+            <h3 class="modal-title">マーカー編集</h3>
+            <div class="tool-list" id="tool-list-container">
+                <div class="tool-list-item selected" data-tool="free">✏️ フリーライン</div>
+                <div class="tool-list-item" data-tool="line">📏 まっすぐ線</div>
+                <div class="tool-list-item" data-tool="arrow">↗️ 矢印</div>
+                <div class="tool-list-item" data-tool="crosshair">🎯 十字点線</div>
+                <div class="tool-list-item" data-tool="angle">📐 角度 (3点タップ)</div>
+                <div class="tool-list-item" data-tool="rect">▢ 四角</div>
+                <div class="tool-list-item" data-tool="triangle">△ 三角</div>
+                <div class="tool-list-item" data-tool="circle">◯ 丸</div>
+                <div class="tool-list-item" data-tool="text">🅰️ テキスト</div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-modal btn-primary" onclick="executeTool()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-text">
+        <div class="modal-content">
+            <h3 class="modal-title">テキスト入力</h3>
+            <input type="text" id="canvas-text-input"
+                style="width:100%; padding:10px; font-size:1rem; border:1px solid #ccc; border-radius:6px;"
+                placeholder="テキストを入力">
+            <div class="modal-actions">
+                <button class="btn-modal btn-cancel" onclick="cancelText()">キャンセル</button>
+                <button class="btn-modal btn-primary" onclick="executeText()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-save">
+        <div class="modal-content" style="width: 320px;">
+            <button class="modal-close-icon" onclick="closeModal('modal-save')">×</button>
+            <h3 class="modal-title">動画保存</h3>
+            <div style="text-align: left; margin-top: 20px;">
+                <div style="margin-bottom: 15px; font-weight: bold; color: #4a5568; font-size: 0.95rem;">
+                    アプリ内に保存
+                </div>
+                <button class="btn-modal btn-primary"
+                    style="width: 100%; padding: 15px; font-size: 1.1rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px;"
+                    onclick="executeSaveToMyList()">
+                    マイリストに保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-saved-success">
+        <div class="modal-content" style="width: 350px;">
+            <h3 class="modal-title" style="margin-bottom: 10px; color: #2b6cb0;">マイリストに保存されました</h3>
+            <div class="modal-actions">
+                <button class="btn-modal btn-primary" onclick="closeModal('modal-saved-success')"
+                    style="width: 100%;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay-bg" id="modal-mylist">
+        <div class="modal-content" style="width: 400px; max-height: 80vh; display: flex; flex-direction: column;">
+            <button class="modal-close-icon" onclick="closeModal('modal-mylist')">×</button>
+            <h3 class="modal-title">マイリスト</h3>
+            <div id="mylist-container"
+                style="text-align: left; margin-top: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM要素
+        const video1 = document.getElementById('video-1');
+        const video2 = document.getElementById('video-2');
+        const seekBar = document.getElementById('seek-bar');
+        const currentTimeDisplay = document.getElementById('current-time');
+        const durationTimeDisplay = document.getElementById('duration-time');
+        const playBtn = document.getElementById('play-btn');
+
+        const compareBtn = document.getElementById('compare-btn');
+        const mainActionMenu = document.getElementById('main-action-menu');
+
+        const toolbar = document.getElementById('toolbar');
+        const globalResetBtn = document.getElementById('global-reset-btn');
+
+        const toolSpeedBtn = document.getElementById('tool-speed');
+        const speedControls = document.getElementById('speed-controls');
+        const speedBtns = document.querySelectorAll('.speed-btn');
+        const toolFlipBtn = document.getElementById('tool-flip');
+        const toolMarkerBtn = document.getElementById('tool-marker');
+
+        const toolOverlayBtn = document.getElementById('tool-overlay');
+        const toolSwapBtn = document.getElementById('tool-swap');
+        const toolSaveBtn = document.getElementById('tool-save');
+        const mylistBtn = document.getElementById('mylist-btn');
+        const mylistContainer = document.getElementById('mylist-container');
+
+        const videoLayout = document.querySelector('.video-layout');
+        const overlayControlsPanel = document.getElementById('overlay-controls-panel');
+
+        const indSeek1 = document.getElementById('ind-seek-1');
+        const indSeek2 = document.getElementById('ind-seek-2');
+        const indTime1 = document.getElementById('ind-time-1');
+        const indTime2 = document.getElementById('ind-time-2');
+        const opacitySlider1 = document.getElementById('opacity-slider-1');
+        const opacitySlider2 = document.getElementById('opacity-slider-2');
+        const opacityVal1 = document.getElementById('opacity-val-1');
+        const opacityVal2 = document.getElementById('opacity-val-2');
+
+        // ======== 動画基本機能 ========
+        let videoFile1 = null;
+        let videoFile2 = null;
+
+        function setupVideoUpload(inputId, videoElement, indSeekElement, fileSetter) {
+            document.getElementById(inputId).addEventListener('change', function (event) {
+                const file = event.target.files[0];
+                if (file) {
+                    fileSetter(file);
+                    if (videoElement.src) URL.revokeObjectURL(videoElement.src);
+                    videoElement.src = URL.createObjectURL(file);
+                }
+            });
+            videoElement.addEventListener('loadedmetadata', () => {
+                indSeekElement.max = videoElement.duration;
+                indSeekElement.disabled = false;
+                const maxDuration = Math.max(video1.duration || 0, video2.duration || 0);
+                seekBar.max = maxDuration;
+                durationTimeDisplay.textContent = formatTime(maxDuration);
+                seekBar.disabled = false;
+                resizeCanvases();
+            });
+            window.addEventListener('resize', resizeCanvases);
+        }
+        setupVideoUpload('upload-1', video1, indSeek1, (f) => videoFile1 = f);
+        setupVideoUpload('upload-2', video2, indSeek2, (f) => videoFile2 = f);
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function updateGlobalSeekBar() {
+            const time1 = video1.currentTime || 0;
+            const time2 = video2.currentTime || 0;
+            const maxTime = Math.max(time1, time2);
+            seekBar.value = maxTime;
+            currentTimeDisplay.textContent = formatTime(maxTime);
+        }
+
+        video1.addEventListener('timeupdate', () => {
+            indSeek1.value = video1.currentTime;
+            indTime1.textContent = formatTime(video1.currentTime);
+            updateGlobalSeekBar();
+        });
+
+        video2.addEventListener('timeupdate', () => {
+            indSeek2.value = video2.currentTime;
+            indTime2.textContent = formatTime(video2.currentTime);
+            updateGlobalSeekBar();
+        });
+
+        seekBar.addEventListener('input', () => {
+            video1.currentTime = seekBar.value;
+            video2.currentTime = seekBar.value;
+        });
+        indSeek1.addEventListener('input', () => video1.currentTime = indSeek1.value);
+        indSeek2.addEventListener('input', () => video2.currentTime = indSeek2.value);
+
+        playBtn.addEventListener('click', function () {
+            if (!video1.src && !video2.src) { alert('動画をアップロードしてください。'); return; }
+            if (video1.paused || video2.paused) {
+                if (video1.src) video1.play();
+                if (video2.src) video2.play();
+                playBtn.innerHTML = '⏸'; playBtn.style.backgroundColor = '#e53e3e';
+            } else {
+                video1.pause(); video2.pause();
+                playBtn.innerHTML = '▶'; playBtn.style.backgroundColor = '#2b6cb0';
+            }
+        });
+        function resetPlayBtn() {
+            if ((!video1.src || video1.ended) && (!video2.src || video2.ended)) {
+                playBtn.innerHTML = '▶'; playBtn.style.backgroundColor = '#2b6cb0';
+            }
+        }
+        video1.addEventListener('ended', resetPlayBtn);
+        video2.addEventListener('ended', resetPlayBtn);
+
+        compareBtn.addEventListener('click', function () {
+            toolbar.style.display = 'flex';
+            globalResetBtn.style.display = 'block';
+            mainActionMenu.style.display = 'none';
+        });
+
+        // 重ねる
+        toolOverlayBtn.addEventListener('click', function () {
+            if (videoLayout.classList.contains('is-overlay')) {
+                overlayControlsPanel.style.display = 'none';
+                toolSwapBtn.classList.remove('active');
+                videoLayout.classList.remove('swapped', 'is-overlay');
+                video1.style.opacity = 1; video2.style.opacity = 1;
+                this.classList.remove('active');
+            } else {
+                videoLayout.classList.add('is-overlay');
+                this.classList.add('active');
+                overlayControlsPanel.style.display = 'flex';
+                video1.style.opacity = opacitySlider1.value / 100;
+                video2.style.opacity = opacitySlider2.value / 100;
+            }
+            resizeCanvases();
+            setTimeout(resizeCanvases, 100);
+        });
+
+        toolSwapBtn.addEventListener('click', function () {
+            videoLayout.classList.toggle('swapped'); this.classList.toggle('active');
+        });
+        opacitySlider1.addEventListener('input', function () {
+            video1.style.opacity = this.value / 100; opacityVal1.textContent = this.value + '%';
+        });
+        opacitySlider2.addEventListener('input', function () {
+            video2.style.opacity = this.value / 100; opacityVal2.textContent = this.value + '%';
+        });
+
+        toolSpeedBtn.addEventListener('click', function () {
+            speedControls.style.display = speedControls.style.display === 'flex' ? 'none' : 'flex';
+            this.classList.toggle('active');
+        });
+        speedBtns.forEach(btn => {
+            btn.addEventListener('click', function () {
+                speedBtns.forEach(b => b.classList.remove('active')); this.classList.add('active');
+                const speed = parseFloat(this.getAttribute('data-speed'));
+                video1.playbackRate = speed; video2.playbackRate = speed;
+            });
+        });
+
+        toolFlipBtn.addEventListener('click', function () {
+            const over1 = document.getElementById('overlay-1');
+            const over2 = document.getElementById('overlay-2');
+            if (toolFlipBtn.classList.contains('active')) {
+                over1.style.display = 'none'; over2.style.display = 'none';
+                toolFlipBtn.classList.remove('active');
+            } else {
+                over1.style.display = 'flex'; over2.style.display = 'flex';
+                toolFlipBtn.classList.add('active');
+                document.querySelectorAll('.marker-execute-btn').forEach(b => b.style.display = 'none');
+                document.querySelectorAll('.flip-execute-btn').forEach(b => b.style.display = 'flex');
+            }
+        });
+        function toggleFlip(videoId) { document.getElementById(videoId).classList.toggle('flipped'); }
+
+        // ======== マーカー機能 (Canvas) ========
+
+        const colors = [
+            { name: '黄色', hex: '#FFD700' }, { name: '水色', hex: '#00BFFF' }, { name: '緑', hex: '#32CD32' },
+            { name: '青', hex: '#0000FF' }, { name: '紫', hex: '#800080' }, { name: 'ピンク', hex: '#FFC0CB' },
+            { name: '赤', hex: '#FF0000' }, { name: 'オレンジ', hex: '#FFA500' }, { name: '黒', hex: '#000000' },
+            { name: 'グレー', hex: '#808080' }, { name: '白', hex: '#FFFFFF' }
+        ];
+
+        const colorGrid = document.getElementById('color-grid-container');
+        colors.forEach((c, idx) => {
+            const div = document.createElement('div');
+            div.className = 'color-item' + (idx === 0 ? ' selected' : '');
+            div.style.backgroundColor = c.hex;
+            div.dataset.hex = c.hex;
+            div.onclick = () => {
+                document.querySelectorAll('.color-item').forEach(el => el.classList.remove('selected'));
+                div.classList.add('selected');
+            };
+            colorGrid.appendChild(div);
+        });
+
+        document.querySelectorAll('.tool-list-item').forEach(el => {
+            el.onclick = () => {
+                document.querySelectorAll('.tool-list-item').forEach(i => i.classList.remove('selected'));
+                el.classList.add('selected');
+            }
+        });
+
+        class MarkerBoard {
+            constructor(id) {
+                this.id = id;
+                this.video = document.getElementById(`video-${id}`);
+                this.canvas = document.getElementById(`canvas-${id}`);
+                this.ctx = this.canvas.getContext('2d');
+                this.history = [];
+                this.redoStack = [];
+                this.color = '#FFD700';
+                this.tool = 'free';
+
+                this.isDrawing = false;
+                this.currentPath = null;
+                this.startX = 0; this.startY = 0;
+                this.anglePoints = [];
+
+                // 初期キャンバスサイズ設定
+                const container = this.canvas.parentElement;
+                this.canvas.width = container.clientWidth || 300;
+                this.canvas.height = container.clientHeight || 150;
+
+                // 動画の実際の表示領域を初期保存
+                this.lastVideoRect = this.getVideoRenderedRect();
+
+                this.bindEvents();
+            }
+
+            // ★ 動画の「実際の表示領域（余白を除いた部分）」を計算する関数
+            getVideoRenderedRect() {
+                const containerWidth = this.canvas.width;
+                const containerHeight = this.canvas.height;
+
+                // 動画がロードされていない場合やサイズが取れない場合はコンテナ全体を返す
+                if (!this.video || !this.video.videoWidth || !this.video.videoHeight) {
+                    return { width: containerWidth, height: containerHeight, x: 0, y: 0 };
+                }
+
+                const videoRatio = this.video.videoWidth / this.video.videoHeight;
+                const containerRatio = containerWidth / containerHeight;
+
+                let renderedWidth, renderedHeight, offsetX, offsetY;
+
+                if (containerRatio > videoRatio) {
+                    // コンテナの方が横長 -> 左右に余白 (Pillarbox)
+                    renderedHeight = containerHeight;
+                    renderedWidth = containerHeight * videoRatio;
+                    offsetX = (containerWidth - renderedWidth) / 2;
+                    offsetY = 0;
+                } else {
+                    // コンテナの方が縦長 -> 上下に余白 (Letterbox)
+                    renderedWidth = containerWidth;
+                    renderedHeight = containerWidth / videoRatio;
+                    offsetX = 0;
+                    offsetY = (containerHeight - renderedHeight) / 2;
+                }
+
+                return { width: renderedWidth, height: renderedHeight, x: offsetX, y: offsetY };
+            }
+
+            // ★ 古い「動画の表示領域」から新しい「動画の表示領域」へ、マーカー座標を変換（スケーリング＆移動）する
+            scaleHistory(oldRect, newRect) {
+                if (oldRect.width === 0 || oldRect.height === 0) return;
+
+                const transformPoint = (p) => {
+                    if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+                        // 古い動画領域内での相対位置 (0.0〜1.0) を計算
+                        const relX = (p.x - oldRect.x) / oldRect.width;
+                        const relY = (p.y - oldRect.y) / oldRect.height;
+
+                        // 新しい動画領域での絶対座標に変換
+                        p.x = relX * newRect.width + newRect.x;
+                        p.y = relY * newRect.height + newRect.y;
+                    }
+                };
+
+                const processList = (list) => {
+                    list.forEach(item => {
+                        if (item.path) item.path.forEach(transformPoint);
+                        if (item.x1 !== undefined) {
+                            const p1 = { x: item.x1, y: item.y1 }; transformPoint(p1);
+                            item.x1 = p1.x; item.y1 = p1.y;
+                        }
+                        if (item.x2 !== undefined) {
+                            const p2 = { x: item.x2, y: item.y2 }; transformPoint(p2);
+                            item.x2 = p2.x; item.y2 = p2.y;
+                        }
+                        if (item.x !== undefined) {
+                            const p = { x: item.x, y: item.y }; transformPoint(p);
+                            item.x = p.x; item.y = p.y;
+                        }
+                        if (item.points) item.points.forEach(transformPoint);
+                    });
+                };
+
+                processList(this.history);
+                processList(this.redoStack);
+                if (this.anglePoints) this.anglePoints.forEach(transformPoint);
+            }
+
+            resize() {
+                const container = this.canvas.parentElement;
+                if (container.clientWidth === 0 || container.clientHeight === 0) return;
+
+                const newWidth = container.clientWidth;
+                const newHeight = container.clientHeight;
+
+                // キャンバス自体のサイズ更新
+                if (this.canvas.width !== newWidth || this.canvas.height !== newHeight) {
+                    this.canvas.width = newWidth;
+                    this.canvas.height = newHeight;
+                }
+
+                // 現在の動画の実際の表示領域を取得
+                const newVideoRect = this.getVideoRenderedRect();
+
+                // 以前の動画表示領域と差分（余白の変化など）があれば、座標を変換する
+                if (this.lastVideoRect &&
+                    (this.lastVideoRect.width !== newVideoRect.width ||
+                        this.lastVideoRect.height !== newVideoRect.height ||
+                        this.lastVideoRect.x !== newVideoRect.x ||
+                        this.lastVideoRect.y !== newVideoRect.y)) {
+
+                    this.scaleHistory(this.lastVideoRect, newVideoRect);
+                    this.lastVideoRect = newVideoRect;
+                }
+
+                this.redraw();
+            }
+
+            getPos(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            }
+
+            bindEvents() {
+                const start = (e) => {
+                    if (e.touches && e.touches.length > 1) return;
+                    e.preventDefault();
+                    const pos = this.getPos(e);
+                    this.startX = pos.x; this.startY = pos.y;
+
+                    if (this.tool === 'text') {
+                        openTextModal(this.id, pos.x, pos.y);
+                        return;
+                    }
+
+                    if (this.tool === 'angle') {
+                        this.anglePoints.push(pos);
+                        if (this.anglePoints.length === 3) {
+                            this.history.push({
+                                tool: 'angle', color: this.color, points: [...this.anglePoints]
+                            });
+                            this.anglePoints = [];
+                            this.redoStack = [];
+                            updateUndoRedo(this.id);
+                        }
+                        this.redraw();
+                        return;
+                    }
+
+                    this.isDrawing = true;
+                    if (this.tool === 'free') {
+                        this.currentPath = [{ x: pos.x, y: pos.y }];
+                    }
+                };
+
+                const move = (e) => {
+                    if (!this.isDrawing) return;
+                    e.preventDefault();
+                    const pos = this.getPos(e);
+
+                    if (this.tool === 'free') {
+                        this.currentPath.push(pos);
+                    }
+                    this.redraw(pos);
+                };
+
+                const end = (e) => {
+                    if (!this.isDrawing) return;
+                    this.isDrawing = false;
+                    const pos = e.changedTouches ? this.getPos(e.changedTouches[0]) : this.getPos(e);
+
+                    if (this.tool === 'free' && this.currentPath.length > 1) {
+                        this.history.push({ tool: 'free', color: this.color, path: this.currentPath });
+                    } else if (['line', 'arrow', 'crosshair', 'rect', 'triangle', 'circle'].includes(this.tool)) {
+                        this.history.push({
+                            tool: this.tool, color: this.color,
+                            x1: this.startX, y1: this.startY, x2: pos.x, y2: pos.y
+                        });
+                    }
+
+                    if (this.tool !== 'angle') this.redoStack = [];
+                    updateUndoRedo(this.id);
+                    this.redraw();
+                };
+
+                this.canvas.addEventListener('mousedown', start);
+                this.canvas.addEventListener('mousemove', move);
+                this.canvas.addEventListener('mouseup', end);
+                this.canvas.addEventListener('mouseleave', end);
+
+                this.canvas.addEventListener('touchstart', start, { passive: false });
+                this.canvas.addEventListener('touchmove', move, { passive: false });
+                this.canvas.addEventListener('touchend', end);
+            }
+
+            redraw(currentPos = null) {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.history.forEach(item => this.drawShape(item));
+
+                if (this.isDrawing && currentPos) {
+                    const tempItem = {
+                        tool: this.tool, color: this.color,
+                        path: this.currentPath,
+                        x1: this.startX, y1: this.startY, x2: currentPos.x, y2: currentPos.y
+                    };
+                    this.drawShape(tempItem);
+                }
+
+                if (this.tool === 'angle' && this.anglePoints.length > 0) {
+                    this.ctx.strokeStyle = this.color;
+                    this.ctx.lineWidth = 3;
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.anglePoints[0].x, this.anglePoints[0].y, 5, 0, Math.PI * 2);
+                    this.ctx.fillStyle = this.color;
+                    this.ctx.fill();
+
+                    if (this.anglePoints.length === 2) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(this.anglePoints[1].x, this.anglePoints[1].y, 5, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(this.anglePoints[0].x, this.anglePoints[0].y);
+                        this.ctx.lineTo(this.anglePoints[1].x, this.anglePoints[1].y);
+                        this.ctx.stroke();
+                    }
+                }
+            }
+
+            drawShape(item) {
+                this.ctx.strokeStyle = item.color;
+                this.ctx.fillStyle = item.color;
+                this.ctx.lineWidth = 4;
+                this.ctx.lineCap = 'round';
+                this.ctx.lineJoin = 'round';
+
+                this.ctx.beginPath();
+                if (item.tool === 'free' && item.path) {
+                    this.ctx.moveTo(item.path[0].x, item.path[0].y);
+                    for (let i = 1; i < item.path.length; i++) {
+                        this.ctx.lineTo(item.path[i].x, item.path[i].y);
+                    }
+                    this.ctx.stroke();
+                } else if (item.tool === 'line') {
+                    this.ctx.moveTo(item.x1, item.y1);
+                    this.ctx.lineTo(item.x2, item.y2);
+                    this.ctx.stroke();
+                } else if (item.tool === 'arrow') {
+                    this.ctx.moveTo(item.x1, item.y1);
+                    this.ctx.lineTo(item.x2, item.y2);
+                    this.ctx.stroke();
+                    const angle = Math.atan2(item.y2 - item.y1, item.x2 - item.x1);
+                    const headLen = 15;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(item.x2, item.y2);
+                    this.ctx.lineTo(item.x2 - headLen * Math.cos(angle - Math.PI / 6), item.y2 - headLen * Math.sin(angle - Math.PI / 6));
+                    this.ctx.lineTo(item.x2 - headLen * Math.cos(angle + Math.PI / 6), item.y2 - headLen * Math.sin(angle + Math.PI / 6));
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                } else if (item.tool === 'crosshair') {
+                    this.ctx.setLineDash([5, 5]);
+                    this.ctx.lineWidth = 2;
+                    this.ctx.moveTo(0, item.y2); this.ctx.lineTo(this.canvas.width, item.y2);
+                    this.ctx.moveTo(item.x2, 0); this.ctx.lineTo(item.x2, this.canvas.height);
+                    this.ctx.stroke();
+                    this.ctx.setLineDash([]);
+                    this.ctx.beginPath();
+                    this.ctx.fillStyle = 'red';
+                    this.ctx.arc(item.x2, item.y2, 4, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else if (item.tool === 'rect') {
+                    this.ctx.rect(item.x1, item.y1, item.x2 - item.x1, item.y2 - item.y1);
+                    this.ctx.stroke();
+                } else if (item.tool === 'triangle') {
+                    this.ctx.moveTo(item.x1 + (item.x2 - item.x1) / 2, item.y1);
+                    this.ctx.lineTo(item.x1, item.y2);
+                    this.ctx.lineTo(item.x2, item.y2);
+                    this.ctx.closePath();
+                    this.ctx.stroke();
+                } else if (item.tool === 'circle') {
+                    const r = Math.sqrt(Math.pow(item.x2 - item.x1, 2) + Math.pow(item.y2 - item.y1, 2));
+                    this.ctx.arc(item.x1, item.y1, r, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                } else if (item.tool === 'text') {
+                    this.ctx.font = "bold 24px sans-serif";
+                    this.ctx.fillText(item.text, item.x, item.y);
+                } else if (item.tool === 'angle' && item.points) {
+                    const p1 = item.points[0], p2 = item.points[1], p3 = item.points[2];
+                    this.ctx.moveTo(p1.x, p1.y); this.ctx.lineTo(p2.x, p2.y);
+                    this.ctx.lineTo(p3.x, p3.y); this.ctx.stroke();
+
+                    const a = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+                    const b = Math.atan2(p3.y - p2.y, p3.x - p2.x);
+                    let angleDeg = Math.abs((a - b) * 180 / Math.PI);
+                    if (angleDeg > 180) angleDeg = 360 - angleDeg;
+
+                    this.ctx.fillStyle = item.color;
+                    this.ctx.font = "bold 20px sans-serif";
+                    this.ctx.fillText(Math.round(angleDeg) + "°", p2.x + 10, p2.y - 10);
+                }
+            }
+
+            addText(x, y, text) {
+                this.history.push({ tool: 'text', color: this.color, x, y, text });
+                this.redoStack = [];
+                updateUndoRedo(this.id);
+                this.redraw();
+            }
+        }
+
+        const boards = {
+            1: new MarkerBoard(1),
+            2: new MarkerBoard(2)
+        };
+
+        function resizeCanvases() {
+            boards[1].resize(); boards[2].resize();
+        }
+
+        toolMarkerBtn.addEventListener('click', function () {
+            const over1 = document.getElementById('overlay-1');
+            const over2 = document.getElementById('overlay-2');
+
+            if (this.classList.contains('active')) {
+                over1.style.display = 'none'; over2.style.display = 'none';
+                this.classList.remove('active');
+            } else {
+                over1.style.display = 'flex'; over2.style.display = 'flex';
+                this.classList.add('active');
+                document.querySelectorAll('.marker-execute-btn').forEach(b => b.style.display = 'flex');
+                document.querySelectorAll('.flip-execute-btn').forEach(b => b.style.display = 'none');
+                toolFlipBtn.classList.remove('active');
+            }
+            resizeCanvases();
+        });
+
+        function startDrawing(id) {
+            document.getElementById(`overlay-${id}`).style.display = 'none';
+            document.getElementById(`canvas-${id}`).classList.add('active');
+            document.getElementById(`d-panel-${id}`).classList.add('active');
+            updateUndoRedo(id);
+        }
+
+        function endDrawing(id) {
+            document.getElementById(`canvas-${id}`).classList.remove('active');
+            document.getElementById(`d-panel-${id}`).classList.remove('active');
+            if (toolMarkerBtn.classList.contains('active')) {
+                document.getElementById(`overlay-${id}`).style.display = 'flex';
+            }
+        }
+
+        function updateUndoRedo(id) {
+            const b = boards[id];
+            const undoBtn = document.getElementById(`undo-${id}`);
+            const redoBtn = document.getElementById(`redo-${id}`);
+            b.history.length > 0 ? undoBtn.classList.remove('disabled') : undoBtn.classList.add('disabled');
+            b.redoStack.length > 0 ? redoBtn.classList.remove('disabled') : redoBtn.classList.add('disabled');
+        }
+
+        function undoDraw(id) {
+            const b = boards[id];
+            if (b.history.length > 0) {
+                b.redoStack.push(b.history.pop());
+                b.anglePoints = [];
+                b.redraw(); updateUndoRedo(id);
+            }
+        }
+        function redoDraw(id) {
+            const b = boards[id];
+            if (b.redoStack.length > 0) {
+                b.history.push(b.redoStack.pop());
+                b.redraw(); updateUndoRedo(id);
+            }
+        }
+
+        let currentBoardId = null;
+        let textTempPos = null;
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        function openClearModal(id) { currentBoardId = id; openModal('modal-clear'); }
+        function executeClear() {
+            if (currentBoardId) {
+                boards[currentBoardId].history = [];
+                boards[currentBoardId].redoStack = [];
+                boards[currentBoardId].anglePoints = [];
+                boards[currentBoardId].redraw();
+                updateUndoRedo(currentBoardId);
+            }
+            closeModal('modal-clear');
+        }
+
+        function openColorModal(id) {
+            currentBoardId = id;
+            const hex = boards[id].color;
+            document.querySelectorAll('.color-item').forEach(el => {
+                el.classList.remove('selected');
+                if (el.dataset.hex === hex) el.classList.add('selected');
+            });
+            openModal('modal-color');
+        }
+        function executeColor() {
+            const selected = document.querySelector('.color-item.selected');
+            if (selected && currentBoardId) {
+                const hex = selected.dataset.hex;
+                boards[currentBoardId].color = hex;
+                document.getElementById(`color-prev-${currentBoardId}`).style.backgroundColor = hex;
+            }
+            closeModal('modal-color');
+        }
+
+        function openToolModal(id) {
+            currentBoardId = id;
+            const tool = boards[id].tool;
+            document.querySelectorAll('.tool-list-item').forEach(el => {
+                el.classList.remove('selected');
+                if (el.dataset.tool === tool) el.classList.add('selected');
+            });
+            openModal('modal-tool');
+        }
+        function executeTool() {
+            const selected = document.querySelector('.tool-list-item.selected');
+            if (selected && currentBoardId) {
+                boards[currentBoardId].tool = selected.dataset.tool;
+                boards[currentBoardId].anglePoints = [];
+            }
+            closeModal('modal-tool');
+        }
+
+        function openTextModal(id, x, y) {
+            currentBoardId = id;
+            textTempPos = { x, y };
+            document.getElementById('canvas-text-input').value = '';
+            openModal('modal-text');
+            setTimeout(() => document.getElementById('canvas-text-input').focus(), 100);
+        }
+        function cancelText() { closeModal('modal-text'); }
+        function executeText() {
+            const text = document.getElementById('canvas-text-input').value.trim();
+            if (text && currentBoardId && textTempPos) {
+                boards[currentBoardId].addText(textTempPos.x, textTempPos.y, text);
+            }
+            closeModal('modal-text');
+        }
+
+        globalResetBtn.addEventListener('click', function () {
+            document.getElementById('overlay-1').style.display = 'none';
+            document.getElementById('overlay-2').style.display = 'none';
+            toolbar.style.display = 'none';
+            speedControls.style.display = 'none';
+            overlayControlsPanel.style.display = 'none';
+            this.style.display = 'none';
+
+            video1.pause(); video2.pause();
+            video1.classList.remove('flipped'); video2.classList.remove('flipped');
+
+            toolFlipBtn.classList.remove('active');
+            toolSpeedBtn.classList.remove('active');
+            toolOverlayBtn.classList.remove('active');
+            toolSwapBtn.classList.remove('active');
+            toolMarkerBtn.classList.remove('active');
+            videoLayout.classList.remove('is-overlay', 'swapped');
+
+            video1.style.opacity = 1; video2.style.opacity = 1;
+            opacitySlider1.value = 100; opacitySlider2.value = 50;
+            opacityVal1.textContent = '100%'; opacityVal2.textContent = '50%';
+            video1.playbackRate = 1.0; video2.playbackRate = 1.0;
+            speedBtns.forEach(b => b.classList.remove('active'));
+            document.querySelector('.speed-btn[data-speed="1.0"]').classList.add('active');
+
+            playBtn.innerHTML = '▶'; playBtn.style.backgroundColor = '#2b6cb0';
+
+            mainActionMenu.style.display = 'flex';
+
+            [1, 2].forEach(id => {
+                endDrawing(id);
+                boards[id].history = []; boards[id].redoStack = []; boards[id].redraw();
+            });
+
+            resizeCanvases();
+        });
+
+        // ======== IndexedDB ========
+        const DB_NAME = 'SmartCoachDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'myList';
+        let db;
+
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+            }
+        };
+        request.onsuccess = (e) => { db = e.target.result; };
+        request.onerror = (e) => { console.error("IndexedDBエラー:", e); };
+
+        toolSaveBtn.addEventListener('click', function () {
+            if (!videoFile1 && !videoFile2) {
+                alert('保存する動画がありません。お手本と自分の動画をアップロードしてください。');
+                return;
+            }
+
+            if (videoLayout.classList.contains('is-overlay')) {
+                videoLayout.classList.remove('is-overlay', 'swapped');
+                toolOverlayBtn.classList.remove('active');
+                toolSwapBtn.classList.remove('active');
+                overlayControlsPanel.style.display = 'none';
+                video1.style.opacity = 1;
+                video2.style.opacity = 1;
+
+                resizeCanvases();
+                setTimeout(() => {
+                    resizeCanvases();
+                    openModal('modal-save');
+                }, 100);
+            } else {
+                openModal('modal-save');
+            }
+        });
+
+        function executeSaveToMyList() {
+            const currentSpeed = document.querySelector('.speed-btn.active') ? parseFloat(document.querySelector('.speed-btn.active').dataset.speed) : 1.0;
+            const isOverlay = videoLayout.classList.contains('is-overlay');
+            const isSwapped = videoLayout.classList.contains('swapped');
+
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+
+            const savedData = {
+                savedAt: new Date().toLocaleString(),
+                globalSettings: {
+                    speed: currentSpeed,
+                    isOverlay: isOverlay,
+                    isSwapped: isSwapped
+                },
+                video1: {
+                    file: videoFile1,
+                    isFlipped: document.getElementById('video-1').classList.contains('flipped'),
+                    opacity: opacitySlider1.value,
+                    markerHistory: JSON.parse(JSON.stringify(boards[1].history))
+                },
+                video2: {
+                    file: videoFile2,
+                    isFlipped: document.getElementById('video-2').classList.contains('flipped'),
+                    opacity: opacitySlider2.value,
+                    markerHistory: JSON.parse(JSON.stringify(boards[2].history))
+                }
+            };
+
+            store.add(savedData);
+
+            transaction.oncomplete = () => {
+                closeModal('modal-save');
+                openModal('modal-saved-success');
+            };
+
+            transaction.onerror = (e) => {
+                console.error("保存エラー:", e);
+                alert("データの保存に失敗しました。ファイルサイズが大きすぎる可能性があります。");
+            };
+        }
+
+        mylistBtn.addEventListener('click', function () {
+            renderMyList();
+            openModal('modal-mylist');
+        });
+
+        function renderMyList() {
+            mylistContainer.innerHTML = '';
+
+            if (!db) {
+                mylistContainer.innerHTML = '<p style="text-align: center; color: #e53e3e; padding: 20px 0;">データベースに接続できません。</p>';
+                return;
+            }
+
+            const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
+
+            store.getAll().onsuccess = (e) => {
+                const items = e.target.result;
+
+                if (items.length === 0) {
+                    mylistContainer.innerHTML = '<p style="text-align: center; color: #a0aec0; padding: 20px 0;">保存されたデータがありません。</p>';
+                    return;
+                }
+
+                items.reverse().forEach((data) => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.style.padding = '15px';
+                    itemDiv.style.border = '1px solid #e2e8f0';
+                    itemDiv.style.borderRadius = '8px';
+                    itemDiv.style.display = 'flex';
+                    itemDiv.style.justifyContent = 'space-between';
+                    itemDiv.style.alignItems = 'center';
+                    itemDiv.style.backgroundColor = '#f7fafc';
+
+                    const infoDiv = document.createElement('div');
+                    infoDiv.innerHTML = `<strong style="color: #2d3748; display: block; margin-bottom: 4px;">保存データ ${data.id}</strong>
+                                         <span style="font-size: 0.8rem; color: #718096;">📅 ${data.savedAt}</span>`;
+
+                    const actionDiv = document.createElement('div');
+                    actionDiv.style.display = 'flex';
+                    actionDiv.style.gap = '8px';
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = '削除';
+                    deleteBtn.className = 'btn-modal btn-cancel';
+                    deleteBtn.style.padding = '8px 12px';
+                    deleteBtn.style.fontSize = '0.9rem';
+                    deleteBtn.onclick = () => {
+                        if (confirm('このデータを削除しますか？')) {
+                            const tx = db.transaction([STORE_NAME], 'readwrite');
+                            tx.objectStore(STORE_NAME).delete(data.id);
+                            tx.oncomplete = () => { renderMyList(); };
+                        }
+                    };
+
+                    const loadBtn = document.createElement('button');
+                    loadBtn.textContent = '読み込む';
+                    loadBtn.className = 'btn-modal btn-primary';
+                    loadBtn.style.padding = '8px 16px';
+                    loadBtn.style.fontSize = '0.9rem';
+
+                    loadBtn.onclick = () => {
+                        loadSavedData(data);
+                        closeModal('modal-mylist');
+                        toolbar.style.display = 'flex';
+                        globalResetBtn.style.display = 'block';
+                        mainActionMenu.style.display = 'none';
+                    };
+
+                    actionDiv.appendChild(deleteBtn);
+                    actionDiv.appendChild(loadBtn);
+                    itemDiv.appendChild(infoDiv);
+                    itemDiv.appendChild(actionDiv);
+                    mylistContainer.appendChild(itemDiv);
+                });
+            };
+        }
+
+        async function loadSavedData(data) {
+            if (data.video1.file) {
+                const buffer1 = await data.video1.file.arrayBuffer();
+                videoFile1 = new Blob([buffer1], { type: data.video1.file.type });
+                if (video1.src) URL.revokeObjectURL(video1.src);
+                video1.src = URL.createObjectURL(videoFile1);
+            }
+            if (data.video2.file) {
+                const buffer2 = await data.video2.file.arrayBuffer();
+                videoFile2 = new Blob([buffer2], { type: data.video2.file.type });
+                if (video2.src) URL.revokeObjectURL(video2.src);
+                video2.src = URL.createObjectURL(videoFile2);
+            }
+
+            boards[1].history = data.video1.markerHistory || [];
+            boards[2].history = data.video2.markerHistory || [];
+            boards[1].redoStack = [];
+            boards[2].redoStack = [];
+            boards[1].anglePoints = [];
+            boards[2].anglePoints = [];
+
+            setTimeout(() => {
+                resizeCanvases();
+                updateUndoRedo(1);
+                updateUndoRedo(2);
+            }, 100);
+
+            const v1 = document.getElementById('video-1');
+            const v2 = document.getElementById('video-2');
+            data.video1.isFlipped ? v1.classList.add('flipped') : v1.classList.remove('flipped');
+            data.video2.isFlipped ? v2.classList.add('flipped') : v2.classList.remove('flipped');
+
+            const speed = data.globalSettings.speed || 1.0;
+            video1.playbackRate = speed;
+            video2.playbackRate = speed;
+            speedBtns.forEach(b => {
+                b.classList.remove('active');
+                if (parseFloat(b.dataset.speed) === speed) b.classList.add('active');
+            });
+
+            opacitySlider1.value = data.video1.opacity || 100;
+            opacityVal1.textContent = opacitySlider1.value + '%';
+            opacitySlider2.value = data.video2.opacity || 50;
+            opacityVal2.textContent = opacitySlider2.value + '%';
+
+            if (data.globalSettings.isOverlay) {
+                videoLayout.classList.add('is-overlay');
+                toolOverlayBtn.classList.add('active');
+                overlayControlsPanel.style.display = 'flex';
+                v1.style.opacity = opacitySlider1.value / 100;
+                v2.style.opacity = opacitySlider2.value / 100;
+
+                if (data.globalSettings.isSwapped) {
+                    videoLayout.classList.add('swapped');
+                    toolSwapBtn.classList.add('active');
+                } else {
+                    videoLayout.classList.remove('swapped');
+                    toolSwapBtn.classList.remove('active');
+                }
+            } else {
+                videoLayout.classList.remove('is-overlay', 'swapped');
+                toolOverlayBtn.classList.remove('active');
+                toolSwapBtn.classList.remove('active');
+                overlayControlsPanel.style.display = 'none';
+                v1.style.opacity = 1;
+                v2.style.opacity = 1;
+            }
+        }
+    </script>
+</body>
+
+</html>
